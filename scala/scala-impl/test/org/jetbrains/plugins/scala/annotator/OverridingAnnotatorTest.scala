@@ -433,4 +433,30 @@ class OverridingAnnotatorTest extends OverridingAnnotatorTestBase {
       """.stripMargin
     ))
   }
+
+  def testProposeToPullUpMethodIfOverridesNothing(): Unit = {
+    val code =
+      """
+        |trait One
+        |class CC extends One {
+        |  override def sample() = 1
+        |}
+      """.stripMargin
+    assertMatches(messages(code)) {
+      case List(
+      Error("sample", "Pull method 'sample' to..."),
+      Error("sample", "Make 'sample' not override")) =>
+    }
+  }
+
+
+    /**
+      * assertMatches(messages(code)) {
+      * case List(
+      * Error("bar", "variable bar cannot override immutable value"),
+      * Error("foo", "variable foo cannot override immutable value"),
+      * Error("abar", "variable abar cannot override immutable value")) =>
+      * }
+      */
+
 }
