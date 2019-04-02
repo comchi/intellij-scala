@@ -132,7 +132,7 @@ trait OverridingAnnotator {
           ScalaBundle.message("member.overrides.nothing", memberType, member.name)
         )
         c.registerFix(new Remove(owner, memberNameId, Override))
-        c.registerFix(new PullUpQuickFix(owner))
+        c.registerFix(new PullUpQuickFix(owner, memberNameId))
 
       }
     } else if (isConcreteElement(nameContext(member))) {
