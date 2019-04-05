@@ -17,7 +17,7 @@ import scala.collection.JavaConverters
   * Nikolay.Tropin
   * 6/3/13
   */
-abstract class ScalaInspectionTestBase extends ScalaQuickFixTestingSupport {
+abstract class ScalaInspectionTestBase extends ScalaAnnotatorQuickFixTestBase {
 
   protected val classOfInspection: Class[_ <: LocalInspectionTool]
 
@@ -87,12 +87,10 @@ object ScalaHighlightsTestBase {
   }
 }
 
-abstract class ScalaAnnotatorQuickFixTestBase extends ScalaQuickFixTestingSupport
-
 abstract class ScalaQuickFixTestBase extends ScalaInspectionTestBase
 
-abstract class ScalaQuickFixTestingSupport extends ScalaHighlightsTestBase {
-  import ScalaQuickFixTestingSupport.quickFixes
+abstract class ScalaAnnotatorQuickFixTestBase extends ScalaHighlightsTestBase {
+  import ScalaAnnotatorQuickFixTestBase.quickFixes
 
   protected final def testQuickFix(text: String, expected: String, hint: String): Unit = {
     val maybeAction = findQuickFix(text, hint)
@@ -126,7 +124,7 @@ abstract class ScalaQuickFixTestingSupport extends ScalaHighlightsTestBase {
     }
 }
 
-object  ScalaQuickFixTestingSupport {
+object ScalaAnnotatorQuickFixTestBase {
   private def quickFixes(info: HighlightInfo): Seq[IntentionAction] = {
     import JavaConverters._
     Option(info.quickFixActionRanges).toSeq

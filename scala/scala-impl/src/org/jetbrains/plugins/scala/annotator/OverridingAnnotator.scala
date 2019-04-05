@@ -127,13 +127,12 @@ trait OverridingAnnotator {
     val memberNameId = member.nameId
     if (superSignaturesWithSelfType.isEmpty) {
       if (owner.hasModifierProperty(OVERRIDE)) {
-        val c = holder.createErrorAnnotation(
+        val annotation = holder.createErrorAnnotation(
           memberNameId,
           ScalaBundle.message("member.overrides.nothing", memberType, member.name)
         )
-        c.registerFix(new Remove(owner, memberNameId, Override))
-        c.registerFix(new PullUpQuickFix(owner, memberNameId))
-
+        annotation.registerFix(new Remove(owner, memberNameId, Override))
+        annotation.registerFix(new PullUpQuickFix(owner, memberNameId))
       }
     } else if (isConcreteElement(nameContext(member))) {
       var isConcretes = false

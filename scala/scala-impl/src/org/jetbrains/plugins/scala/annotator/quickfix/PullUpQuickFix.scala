@@ -6,7 +6,7 @@ import com.intellij.ide.util.PsiClassListCellRenderer
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.ReadonlyStatusHandler
+import com.intellij.openapi.vfs.{ReadonlyStatusHandler, VirtualFile}
 import com.intellij.psi.search.PsiElementProcessor
 import com.intellij.psi.{PsiClass, PsiElement, PsiFile}
 import org.jetbrains.plugins.scala.ScalaBundle
@@ -18,29 +18,25 @@ import org.jetbrains.plugins.scala.lang.psi.api.toplevel.typedef.{ScMember, ScTe
 import org.jetbrains.plugins.scala.lang.refactoring.extractTrait.ScalaExtractMemberInfo
 import org.jetbrains.plugins.scala.lang.refactoring.memberPullUp.ScalaPullUpProcessor
 
-class PullUpQuickFix(element: PsiElement, memberNameId: PsiElement) extends IntentionAction {
-
-  override def getText: String = element match {
-      case _: ScVariableDefinition => ScalaBundle.message("pull.variable.to", memberNameId.getText)
-      case _: ScPatternDefinition => ScalaBundle.message("pull.value.to", memberNameId.getText)
-      case _ => ScalaBundle.message("pull.method.to", memberNameId.getText)
-    }
-
-  override def getFamilyName: String = getText
-
-  override def startInWriteAction(): Boolean = true
+final class PullUpQuickFix(element: PsiElement, memberNameId: PsiElement) extends IntentionAction {
+  override val getText: String = element match {
+    case _: ScVariableDefinition => ScalaBundle.message("pull.variable.to", memberNameId.getText)
+    case _: ScPatternDefinition => ScalaBundle.message("pull.value.to", memberNameId.getText)
+    case _ => ScalaBundle.message("pull.method.to", memberNameId.getText)
+  }
+  override val getFamilyName: String = getText
+  override val startInWriteAction: Boolean = true
 
   override def isAvailable(project: Project, editor: Editor, psiFile: PsiFile): Boolean = {
     getSelectedElement(classOf[ScTemplateDefinition], editor, psiFile)
       .exists(
         clazz => {
-          val writableParentExists = superRefs(clazz).exists(
-            ref => ReadonlyStatusHandler
-              .ensureFilesWritable(project, ref._2.getContainingFile.getVirtualFile))
+          val writableParentExists = superRefs(clazz)
+            .map { case (_, c) => c.getContainingFile.getVirtualFile }
+            .exists(ReadonlyStatusHandler.ensureFilesWritable(project, _: VirtualFile))
 
           val hasOverrideModifier = getSelectedElement(classOf[ScModifierListOwner], editor, psiFile)
-            .get
-            .hasModifierProperty("override")
+            .exists(_.hasModifierProperty("override"))
 
           hasOverrideModifier && writableParentExists
         }
@@ -53,28 +49,28 @@ class PullUpQuickFix(element: PsiElement, memberNameId: PsiElement) extends Inte
     val superClasses = allSupers(project, sourceClass)
 
     if (!ApplicationManager.getApplication.isUnitTestMode) {
-      NavigationUtil.getPsiElementPopup[PsiClass](
-        superClasses.toArray, new PsiClassListCellRenderer, "Choose class", new PsiElementProcessor[PsiClass] {
-          override def execute(t: PsiClass): Boolean = {
-            ApplicationManager.getApplication.invokeLater(
-              () => {
-                inWriteCommandAction {
-                  pullUpMember(
-                    target = memberToOverride,
-                    from = sourceClass,
-                    to = t,
-                    project = project
-                  )
-                }(project)
-              })
-            true
-          }
-        }).showInBestPositionFor(editor)
+      NavigationUtil
+        .getPsiElementPopup(
+          superClasses.toArray,
+          new PsiClassListCellRenderer,
+          "Choose class",
+          new PullUpProcessor(memberToOverride, sourceClass, project))
+        .showInBestPositionFor(editor)
     } else {
       // for headless test flow
       superClasses.headOption.foreach(pullUpMember(memberToOverride, sourceClass, _: PsiClass, project))
     }
   }
+
+  private def allSupers(project: Project, clazz: PsiClass): Set[PsiClass] = {
+    val supers = clazz.getSupers
+      .filter(c => ReadonlyStatusHandler.ensureFilesWritable(project, c.getContainingFile.getVirtualFile))
+    (supers ++ supers.flatMap(c => allSupers(project, c))).toSet
+  }
+
+  private def getSelectedElement[T <: PsiElement](clazz: Class[T], editor: Editor, psiFile: PsiFile): Option[T] =
+    psiFile.findElementAt(editor.getSelectionModel.getSelectionStart)
+      .parentOfType[T](clazz, strict = false)
 
   private def pullUpMember(target: ScMember, from: ScTemplateDefinition, to: PsiClass, project: Project): Unit = {
     val info = new ScalaExtractMemberInfo(target)
@@ -83,14 +79,23 @@ class PullUpQuickFix(element: PsiElement, memberNameId: PsiElement) extends Inte
       .moveMembersToBase()
   }
 
-  private def getSelectedElement[T <: PsiElement](clazz: Class[T], editor: Editor, psiFile: PsiFile): Option[T] =
-    psiFile.findElementAt(editor.getSelectionModel.getSelectionStart)
-      .parentOfType[T](clazz, strict = false)
+  private class PullUpProcessor(memberToOverride: ScMember, sourceClass: ScTemplateDefinition, project: Project)
+    extends PsiElementProcessor[PsiClass] {
 
-  private def allSupers(project: Project, clazz: PsiClass): Set[PsiClass] = {
-    val supers = clazz.getSupers
-      .filter(c => ReadonlyStatusHandler.ensureFilesWritable(project, c.getContainingFile.getVirtualFile))
-    (supers ++ supers.flatMap(c => allSupers(project, c))).toSet
+    override def execute(t: PsiClass): Boolean = {
+      ApplicationManager.getApplication.invokeLater(
+        () => {
+          inWriteCommandAction {
+            pullUpMember(
+              target = memberToOverride,
+              from = sourceClass,
+              to = t,
+              project = project
+            )
+          }(project)
+        })
+      true
+    }
   }
 
 }
